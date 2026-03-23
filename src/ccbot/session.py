@@ -137,30 +137,28 @@ class SessionManager:
             return
 
         async def _do_sync() -> None:
-            import aiohttp
+            import httpx
 
-            # Sync once per allowed user
-            for user_id in config.allowed_users:
-                payload = {"user_id": user_id, "state": state}
-                headers: dict[str, str] = {"Content-Type": "application/json"}
-                if config.miniapp_sync_secret:
-                    headers["Authorization"] = f"Bearer {config.miniapp_sync_secret}"
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.post(
+            headers: dict[str, str] = {}
+            if config.miniapp_sync_secret:
+                headers["Authorization"] = f"Bearer {config.miniapp_sync_secret}"
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                for user_id in config.allowed_users:
+                    payload = {"user_id": user_id, "state": state}
+                    try:
+                        resp = await client.post(
                             config.miniapp_sync_url,
                             json=payload,
                             headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=5),
-                        ) as resp:
-                            if resp.status != 200:
-                                body = await resp.text()
-                                logger.warning(
-                                    "Mini App sync failed for user %d: %d %s",
-                                    user_id, resp.status, body,
-                                )
-                except Exception as e:
-                    logger.debug("Mini App sync error for user %d: %s", user_id, e)
+                        )
+                        if resp.status_code != 200:
+                            logger.warning(
+                                "Mini App sync failed for user %d: %d %s",
+                                user_id, resp.status_code, resp.text,
+                            )
+                    except Exception as e:
+                        logger.debug("Mini App sync error for user %d: %s", user_id, e)
 
         try:
             loop = asyncio.get_running_loop()
