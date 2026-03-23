@@ -129,6 +129,45 @@ class SessionManager:
         }
         atomic_write_json(config.state_file, state)
         logger.debug("State saved to %s", config.state_file)
+        self._sync_to_miniapp(state)
+
+    def _sync_to_miniapp(self, state: dict[str, Any]) -> None:
+        """Fire-and-forget POST state to Mini App server for remote access."""
+        if not config.miniapp_sync_url:
+            return
+
+        async def _do_sync() -> None:
+            import aiohttp
+
+            # Sync once per allowed user
+            for user_id in config.allowed_users:
+                payload = {"user_id": user_id, "state": state}
+                headers: dict[str, str] = {"Content-Type": "application/json"}
+                if config.miniapp_sync_secret:
+                    headers["Authorization"] = f"Bearer {config.miniapp_sync_secret}"
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            config.miniapp_sync_url,
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=5),
+                        ) as resp:
+                            if resp.status != 200:
+                                body = await resp.text()
+                                logger.warning(
+                                    "Mini App sync failed for user %d: %d %s",
+                                    user_id, resp.status, body,
+                                )
+                except Exception as e:
+                    logger.debug("Mini App sync error for user %d: %s", user_id, e)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_do_sync())
+        except RuntimeError:
+            # No running loop — skip sync
+            pass
 
     def _is_window_id(self, key: str) -> bool:
         """Check if a key looks like a tmux window ID (e.g. '@0', '@12')."""
