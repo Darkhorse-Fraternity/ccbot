@@ -107,6 +107,11 @@ class Config:
             "OPENAI_BASE_URL", "https://api.openai.com/v1"
         )
 
+        # Mini App state sync (optional)
+        # When set, ccbot will POST state to this URL on every save
+        self.miniapp_sync_url: str = os.getenv("MINIAPP_SYNC_URL", "")
+        self.miniapp_sync_secret: str = os.getenv("MINIAPP_SYNC_SECRET", "")
+
         # Scrub sensitive vars from os.environ so child processes never inherit them.
         # Values are already captured in Config attributes above.
         for var in SENSITIVE_ENV_VARS:
